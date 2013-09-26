@@ -2,10 +2,36 @@
 
 class Toro
 {
-    public static function serve($routes)
-    {
-        ToroHook::fire('before_request', compact('routes'));
+    private static $routes = array();
 
+    private static $tokens = array(
+        ':string' => '([a-zA-Z]+)',
+        ':number' => '([0-9]+)',
+        ':alpha'  => '([a-zA-Z0-9-_]+)'
+    );
+
+    public static function tokens($tokens) 
+    {
+        if (is_array($tokens)) {
+            self::$tokens = array_merge(self::$tokens, $tokens);
+        }
+    }
+
+    public static function routes($routes) 
+    {
+        if (is_array($routes)) {
+            self::$routes = array_merge(self::$routes, $routes);
+        }
+    }
+
+    public static function serve($routes = null)
+    {
+        self::routes($routes);
+
+        $routes = self::$routes;
+        ToroHook::fire('before_request', compact('routes'));
+        $routes = self::$routes;
+        
         $request_method = strtolower($_SERVER['REQUEST_METHOD']);
         $path_info = '/';
         if (!empty($_SERVER['PATH_INFO'])) {
@@ -23,16 +49,13 @@ class Toro
         $discovered_handler = null;
         $regex_matches = array();
 
-        if (isset($routes[$path_info])) {
-            $discovered_handler = $routes[$path_info];
+        if (isset(self::$routes[$path_info])) {
+            $discovered_handler = self::$routes[$path_info];
         }
-        else if ($routes) {
-            $tokens = array(
-                ':string' => '([a-zA-Z]+)',
-                ':number' => '([0-9]+)',
-                ':alpha'  => '([a-zA-Z0-9-_]+)'
-            );
-            foreach ($routes as $pattern => $handler_name) {
+        else if (self::$routes) {
+            $tokens = self::$tokens;
+
+            foreach (self::$routes as $pattern => $handler_name) {
                 $pattern = strtr($pattern, $tokens);
                 if (preg_match('#^/?' . $pattern . '/?$#', $path_info, $matches)) {
                     $discovered_handler = $handler_name;
@@ -104,7 +127,7 @@ class ToroHook
         $instance->hooks[$hook_name][] = array('data' => $fn, 'priority' => (int) $priority);
     }
 
-    public static function fire($hook_name, $params = null)
+    public static function fire($hook_name, &$params = null)
     {
         $instance = self::get_instance();
         if (isset($instance->hooks[$hook_name])) {
