@@ -2,11 +2,23 @@
 
 class Toro
 {
+    public static $routes;
+
+    public static $request_method;
+
+    public static $discovered_handler;
+
+    public static $regex_matches = array();
+
+    public static $handler_instance;
+
     public static function serve($routes)
     {
         ToroHook::fire('before_request', compact('routes'));
+        self::$routes = $routes;
 
-        $request_method = strtolower($_SERVER['REQUEST_METHOD']);
+        self::$request_method = strtolower($_SERVER['REQUEST_METHOD']);
+
         $path_info = '/';
         if (!empty($_SERVER['PATH_INFO'])) {
             $path_info = $_SERVER['PATH_INFO'];
@@ -20,23 +32,23 @@ class Toro
             }
         }
         
-        $discovered_handler = null;
-        $regex_matches = array();
+        self::$discovered_handler = null;
+        self::$regex_matches = array();
 
-        if (isset($routes[$path_info])) {
-            $discovered_handler = $routes[$path_info];
+        if (isset(self::$routes[$path_info])) {
+            self::$discovered_handler = self::$routes[$path_info];
         }
-        else if ($routes) {
+        else if (self::$routes) {
             $tokens = array(
                 ':string' => '([a-zA-Z]+)',
                 ':number' => '([0-9]+)',
                 ':alpha'  => '([a-zA-Z0-9-_]+)'
             );
-            foreach ($routes as $pattern => $handler_name) {
+            foreach (self::$routes as $pattern => $handler_name) {
                 $pattern = strtr($pattern, $tokens);
                 if (preg_match('#^/?' . $pattern . '/?$#', $path_info, $matches)) {
-                    $discovered_handler = $handler_name;
-                    $regex_matches = $matches;
+                    self::$discovered_handler = $handler_name;
+                    self::$regex_matches = $matches;
                     break;
                 }
             }
@@ -44,43 +56,56 @@ class Toro
 
         $result = null;
 
-        $handler_instance = null;
-        if ($discovered_handler) {
-            if (is_string($discovered_handler)) {
-                $handler_instance = new $discovered_handler();
+        self::$handler_instance = null;
+        if (self::$discovered_handler) {
+            if (is_string(self::$discovered_handler)) {
+                self::$handler_instance = new self::$discovered_handler();
             }
             elseif (is_callable($discovered_handler)) {
-                $handler_instance = $discovered_handler();
+                self::$handler_instance = self::$discovered_handler();
             }
         }
 
-        if ($handler_instance) {
-            unset($regex_matches[0]);
+        if (self::$handler_instance) {
+            unset(self::$regex_matches[0]);
 
-            if (self::is_xhr_request() && method_exists($handler_instance, $request_method . '_xhr')) {
+            if (self::is_xhr_request() && method_exists(self::$handler_instance, self::$request_method . '_xhr')) {
                 header('Content-type: application/json');
                 header('Expires: Mon, 26 Jul 1997 05:00:00 GMT');
                 header('Last-Modified: ' . gmdate('D, d M Y H:i:s') . ' GMT');
                 header('Cache-Control: no-store, no-cache, must-revalidate');
                 header('Cache-Control: post-check=0, pre-check=0', false);
                 header('Pragma: no-cache');
-                $request_method .= '_xhr';
+                self::$request_method .= '_xhr';
             }
 
-            if (method_exists($handler_instance, $request_method)) {
-                ToroHook::fire('before_handler', compact('routes', 'discovered_handler', 'request_method', 'regex_matches'));
-                $result = call_user_func_array(array($handler_instance, $request_method), $regex_matches);
-                ToroHook::fire('after_handler', compact('routes', 'discovered_handler', 'request_method', 'regex_matches', 'result'));
+            if (method_exists(self::$handler_instance, self::$request_method)) {
+                ToroHook::fire('before_handler', array('routes' => self::$routes, 
+                    'discovered_handler' => self::$discovered_handler, 'request_method' => self::$request_method, 
+                    'regex_matches' => self::$regex_matches));
+
+                $result = call_user_func_array(array(self::$handler_instance, self::$request_method), self::$regex_matches);
+                
+                ToroHook::fire('after_handler', array('routes' => self::$routes, 
+                    'discovered_handler' => self::$discovered_handler, 'request_method' => self::$request_method, 
+                    'regex_matches' => self::$regex_matches, 'result' => $result));
+
             }
             else {
-                ToroHook::fire('404', compact('routes', 'discovered_handler', 'request_method', 'regex_matches'));
+                ToroHook::fire('404', array('routes' => self::$routes, 
+                    'discovered_handler' => self::$discovered_handler, 'request_method' => self::$request_method, 
+                    'regex_matches' => self::$regex_matches));
             }
         }
         else {
-            ToroHook::fire('404', compact('routes', 'discovered_handler', 'request_method', 'regex_matches'));
+            ToroHook::fire('404', array('routes' => self::$routes, 
+                'discovered_handler' => self::$discovered_handler, 'request_method' => self::$request_method, 
+                'regex_matches' => self::$regex_matches));
         }
 
-        ToroHook::fire('after_request', compact('routes', 'discovered_handler', 'request_method', 'regex_matches', 'result'));
+        ToroHook::fire('after_request', array('routes' => self::$routes, 
+            'discovered_handler' => self::$discovered_handler, 'request_method' => self::$request_method, 
+            'regex_matches' => self::$regex_matches, 'result' => $result));
     }
 
     private static function is_xhr_request()
@@ -115,7 +140,9 @@ class ToroHook
                 return $instance->hooks[$hook_name][$a]['priority'] < $instance->hooks[$hook_name][$b]['priority']?1:-1;
             });
             foreach ($instance->hooks[$hook_name] as $hook) {
-                call_user_func_array($hook['data'], array(&$params));
+                if (call_user_func_array($hook['data'], array($params)) === false) {
+                    break;
+                }
             }
         }
     }
