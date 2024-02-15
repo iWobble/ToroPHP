@@ -7,7 +7,7 @@ pipeline {
     stage('Scan') {
       steps {
         withSonarQubeEnv(installationName: 'SonarQube') {
-          sh './mvnw clean sonar'
+          sh './mvnw clean sonar:sonar'
         }
       }
     }
