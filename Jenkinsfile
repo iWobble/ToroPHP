@@ -1,14 +1,13 @@
 pipeline {
-  agent { label 'built-in' }
+  agent { label 'kube-agent' }
   options {
     buildDiscarder(logRotator(numToKeepStr: '5'))
   }
   stages {
     stage('Scan') {
-      def scannerHome = tool 'SonarScanner 5.0';
       steps {
-        withSonarQubeEnv(installationName: 'SonarQube') {
-          sh "${scannerHome}/bin/sonar-scanner"
+        withSonarQubeEnv(installationName: 'SonarQube', ) {
+          println ${env} 
         }
       }
     }
