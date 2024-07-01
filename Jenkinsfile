@@ -9,6 +9,10 @@ pipeline {
         stage('Scan') {
             steps {
                 sayHello()
+                logInfo('logging INFO')
+                logWarn('logging WARN')
+                logError('logging ERROR')
+                logDeprecated('logging Deprecated')
                 withSonarQubeEnv(installationName: 'SonarQube', ) {
                     println "${env}"
                 }
