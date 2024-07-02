@@ -4,6 +4,7 @@ pipeline {
     agent any
     options {
         buildDiscarder(logRotator(numToKeepStr: '5'))
+        ansiColor('xterm')
     }
     stages {
         stage('Scan') {
